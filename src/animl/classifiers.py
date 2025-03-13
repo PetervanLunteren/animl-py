@@ -71,18 +71,32 @@ def load_model(model_path, class_file, device=None, architecture="CTL"):
         model_path = str(model_path)
         start_epoch = 0
         if (architecture == "CTL") or (architecture == "efficientnet_v2_m"):
-            model = EfficientNet(len(classes))
+            model = EfficientNetV2M(len(classes))
+        elif architecture == "efficientnet_v2_s":
+            model = EfficientNetV2S(len(classes))
         elif architecture == "convnext_base":
             model = ConvNeXtBase(len(classes))
         else:  # can only resume models from a directory at this time
             raise AssertionError('Please provide the correct model')
 
         model_states = []
+        last_pt_fpath = None
         for file in os.listdir(model_path):
             if os.path.splitext(file)[1] == ".pt":
                 model_states.append(file)
+            
+            # if last.pt is present, this is the last checkpoint
+            if file == 'last.pt':
+                last_pt_fpath = file
 
-        if len(model_states):
+        if last_pt_fpath:
+            # load last.pt
+            print('Resuming from last.pt')
+            state = torch.load(open(f'{model_path}/last.pt', 'rb'))
+            model.load_state_dict(state['model'])
+            start_epoch = state['epoch']
+            
+        elif len(model_states):
             # at least one save state found; get latest
             model_epochs = [int(m.replace(model_path, '').replace('.pt', '')) for m in model_states]
             start_epoch = max(model_epochs)
@@ -107,12 +121,19 @@ def load_model(model_path, class_file, device=None, architecture="CTL"):
         # PyTorch dict
         if model_path.suffix == '.pt':
             if (architecture == "CTL") or (architecture == "efficientnet_v2_m"):
-                model = EfficientNet(len(classes), tune=False)
+                model = EfficientNetV2M(len(classes), tune=False)
                 checkpoint = torch.load(model_path, map_location=device)
                 model.load_state_dict(checkpoint['model'])
                 model.to(device)
                 model.eval()
-                model.framework = "EfficientNet"
+                model.framework = "EfficientNetV2M"
+            elif architecture == "efficientnet_v2_s":
+                model = EfficientNetV2S(len(classes), tune=False)
+                checkpoint = torch.load(model_path, map_location=device)
+                model.load_state_dict(checkpoint['model'])
+                model.to(device)
+                model.eval()
+                model.framework = "EfficientNetV2S"
             elif architecture == "convnext_base":
                 model = ConvNeXtBase(len(classes), tune=False)
                 checkpoint = torch.load(model_path, map_location=device)
@@ -144,16 +165,47 @@ def load_model(model_path, class_file, device=None, architecture="CTL"):
     else:
         raise ValueError("Model not found at given path")
 
-class EfficientNet(nn.Module):
+class EfficientNetV2M(nn.Module):
 
     def __init__(self, num_classes, tune=True):
         '''
-            Construct the EfficientNet model architecture.
+            Construct the EfficientNet v2 medium model architecture.
         '''
-        super(EfficientNet, self).__init__()
+        super(EfficientNetV2M, self).__init__()
         self.avgpool = nn.AdaptiveAvgPool2d(1)
 
         self.model = efficientnet.efficientnet_v2_m(weights=efficientnet.EfficientNet_V2_M_Weights.DEFAULT)       # "pretrained": use weights pre-trained on ImageNet
+        if tune:
+            for params in self.model.parameters():
+                params.requires_grad = True
+
+        num_ftrs = self.model.classifier[1].in_features
+
+        self.model.classifier[1] = nn.Linear(in_features=num_ftrs, out_features=num_classes)
+
+    def forward(self, x):
+        '''
+            Forward pass (prediction)
+        '''
+        # x.size(): [B x 3 x W x H]
+        x = self.model.features(x)
+        x = self.avgpool(x)
+        x = torch.flatten(x, 1)
+
+        prediction = self.model.classifier(x)  # prediction.size(): [B x num_classes]
+
+        return prediction
+    
+class EfficientNetV2S(nn.Module):
+
+    def __init__(self, num_classes, tune=True):
+        '''
+            Construct the EfficientNet v2 small model architecture.
+        '''
+        super(EfficientNetV2S, self).__init__()
+        self.avgpool = nn.AdaptiveAvgPool2d(1)
+
+        self.model = efficientnet.efficientnet_v2_s(weights=efficientnet.EfficientNet_V2_S_Weights.DEFAULT)       # "pretrained": use weights pre-trained on ImageNet
         if tune:
             for params in self.model.parameters():
                 params.requires_grad = True

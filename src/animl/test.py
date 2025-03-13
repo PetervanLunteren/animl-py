@@ -11,7 +11,15 @@ from tqdm import trange
 import pandas as pd
 import torch
 import numpy as np
-from sklearn.metrics import confusion_matrix
+import os
+import csv
+import random
+from PIL import Image
+import matplotlib.pyplot as plt
+from collections import defaultdict
+from pathlib import Path
+import torch.nn.functional as F
+from sklearn.metrics import confusion_matrix, classification_report
 
 from .generator import train_dataloader
 from .classifiers import load_model
@@ -27,10 +35,11 @@ def test(data_loader, model, device='cpu'):
             device: run model on gpu or cpu, defaults to cpu
     '''
     model.to(device)
-    model.eval()  # put the model into training mode
+    model.eval()  # put the model into evaluation mode
 
     pred_labels = []
     true_labels = []
+    confidences = []
     filepaths = []
 
     progressBar = trange(len(data_loader))
@@ -40,22 +49,31 @@ def test(data_loader, model, device='cpu'):
             data = batch[0]
             data = data.to(device)
             prediction = model(data)
-            # add predicted labels to the predicted labels list
-            pred_label = torch.argmax(prediction, dim=1)
+            
+            # apply softmax to get the probability distribution
+            probabilities = F.softmax(prediction, dim=1)
+            
+            # get predicted labels
+            pred_label = torch.argmax(probabilities, dim=1)
             pred_label_np = pred_label.cpu().detach().numpy()
             pred_labels.extend(pred_label_np)
+            
+            # get confidence scores (probabilities for the predicted class)
+            conf_score = probabilities.max(dim=1).values.cpu().detach().numpy()  # maximum probability
+            confidences.extend(conf_score)
+
             # get ground truth labels
             labels = batch[1]
             labels_np = labels.numpy()
             true_labels.extend(labels_np)
+            
             # get file paths
             paths = batch[2]
             filepaths.extend(paths)
 
             progressBar.update(1)
 
-    return pred_labels, true_labels, filepaths
-
+    return pred_labels, true_labels, confidences, filepaths
 
 def main():
     '''
@@ -80,26 +98,37 @@ def main():
         device = 'cpu'
 
     # initialize model and get class list
-    model, classes = load_model(cfg['active_model'], cfg['class_file'], device=device, architecture=cfg['architecture'])
+    active_model = cfg.get('active_model', os.path.join(cfg['experiment_folder'], 'best.pt'))
+    model, classes = load_model(active_model, cfg['class_file'], device=device, architecture=cfg['architecture'])
     categories = dict([[x["class"], x["id"]] for _, x in classes.iterrows()])
 
-    # initialize data loaders for training and validation set
-    test_dataset = pd.read_csv(cfg['test_set']).reset_index(drop=True)
+    # initialize data loaders for training and validation set 
+    if 'test_set' not in cfg: print('No test set specified in config file. Will continue to test on validation set.')
+    test_set = cfg.get('test_set', cfg['validate_set'])
+    test_dataset = pd.read_csv(test_set).reset_index(drop=True)
     dl_test = train_dataloader(test_dataset, categories, batch_size=cfg['batch_size'], workers=cfg['num_workers'], crop=crop)
 
     # get predictions
-    pred, true, paths = test(dl_test, model, device)
+    pred, true, conf, paths = test(dl_test, model, device)
     pred = np.asarray(pred)
     true = np.asarray(true)
+    conf = np.asarray(conf)
+    corr = (pred == true).tolist()
 
+    # print accuracy
     oa = np.mean((pred == true))
     print(f"Test accuracy: {oa}")
 
+    # save test results
     results = pd.DataFrame({'FilePath': paths,
                             'Ground Truth': true,
-                            'Predicted': pred})
+                            'Predicted': pred,
+                            'Confidence': conf,
+                            'Correct': corr})
     results.to_csv(cfg['experiment_folder'] + "/test_results.csv")
+    print(f"Creating: .\\test_results.csv")
 
+    # create confusion matrix
     cm = confusion_matrix(true, pred)
     confuse = pd.DataFrame(cm, columns=classes['class'], index=classes['class'])
     confuse.to_csv(cfg['experiment_folder'] + "/confusion_matrix.csv")

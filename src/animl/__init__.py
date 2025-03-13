@@ -22,7 +22,7 @@ from animl import zooniverse
 
 from animl.animl_to_md import (animl_results_to_md_results,
                                detection_category_id_to_name, main,)
-from animl.classifiers import (EfficientNet, load_model, save_model,)
+from animl.classifiers import (EfficientNetV2M, EfficientNetV2S, load_model, save_model,)
 from animl.detect import (detect_MD_batch, parse_MD, process_image,)
 from animl.file_management import (VALID_EXTENSIONS, WorkingDirectory,
                                    active_times, build_file_manifest,
@@ -109,7 +109,7 @@ __all__ = ['AUTOINSTALL', 'Albumentations', 'ArcFaceLossAdaptiveMargin',
            'C3x', 'CONFIG_DIR', 'CONF_DIGITS', 'COORD_DIGITS', 'Classify',
            'Concat', 'Contract', 'Conv', 'CrossConv', 'DATASETS_DIR', 'DWConv',
            'DWConvTranspose2d', 'Detect', 'DetectMultiBackend', 'Detections',
-           'EarlyStopping', 'EfficientNet', 'ElasticArcFace', 'Expand', 'FILE',
+           'EarlyStopping', 'EfficientNetV2M', 'ElasticArcFace', 'Expand', 'FILE',
            'FONT', 'Focus', 'GeM', 'GhostBottleneck', 'GhostConv', 'HELP_URL',
            'IMAGE_HEIGHT', 'IMAGE_WIDTH', 'IMG_FORMATS', 'ImageGenerator',
            'InfiniteDataLoader', 'LOCAL_RANK', 'LOGGER', 'LoadImages',
@@ -166,4 +166,4 @@ __all__ = ['AUTOINSTALL', 'Albumentations', 'ArcFaceLossAdaptiveMargin',
            'utils', 'validate', 'verify_image_label', 'video_processing',
            'viewpoint', 'viewpoint_estimator', 'weights_init_classifier',
            'weights_init_kaiming', 'xyn2xy', 'xywh2xyxy', 'xywhn2xyxy',
-           'xyxy2xywh', 'xyxy2xywhn', 'yolo', 'zooniverse']
+           'xyxy2xywh', 'xyxy2xywhn', 'yolo', 'zooniverse', 'EfficientNetV2S']

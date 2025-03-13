@@ -5,20 +5,25 @@
     Original script from
     2022 Benjamin Kellenberger
 '''
+
 import argparse
 import yaml
 from tqdm import trange
 import pandas as pd
 import random
 import torch.nn as nn
+import os
+import csv
 import torch
 from torch.backends import cudnn
 from torch.optim import SGD
+import matplotlib.pyplot as plt
 from sklearn.metrics import precision_score, recall_score
-from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.optim.lr_scheduler import ReduceLROnPlateau, ExponentialLR
+from sklearn.utils.class_weight import compute_class_weight
 
 
-from .generator import train_dataloader
+from .generator import train_dataloader, find_optimal_batch_size
 from .classifiers import save_model, load_model
 
 # # log values using comet ml (comet.com)
@@ -41,7 +46,7 @@ def init_seed(seed):
         cudnn.deterministic = True
 
 
-def train(data_loader, model, optimizer, device='cpu'):
+def train(data_loader, model, optimizer, device='cpu', class_weights_tensor=None):
     '''
         Our actual training function.
     '''
@@ -49,7 +54,10 @@ def train(data_loader, model, optimizer, device='cpu'):
     model.train()  # put the model into training mode
 
     # loss function
-    criterion = nn.CrossEntropyLoss()
+    if class_weights_tensor is not None and class_weights_tensor.numel() > 0:
+        criterion = nn.CrossEntropyLoss(weight = class_weights_tensor)
+    else:
+        criterion = nn.CrossEntropyLoss()
 
     # log the loss and overall accuracy (OA)
     loss_total, oa_total = 0.0, 0.0
@@ -140,7 +148,7 @@ def validate(data_loader, model, device="cpu"):
             pred_labels.extend(pred_label_np)
 
             progressBar.set_description(
-                '[Val ] Loss: {:.2f}; OA: {:.2f}%'.format(
+                '[Val  ] Loss: {:.2f}; OA: {:.2f}%'.format(
                     loss_total/(idx+1),
                     100*oa_total/(idx+1)
                 )
@@ -157,6 +165,58 @@ def validate(data_loader, model, device="cpu"):
     recall = recall_score(true_labels, pred_labels, average="weighted")
 
     return loss_total, oa_total, precision, recall
+
+def append_to_history_csv(history_csv, epoch, train_loss, train_acc, val_loss, val_acc, val_precision, val_recall, learning_rate):
+    # Write or append history to CSV file
+    file_exists = os.path.isfile(history_csv)
+    with open(history_csv, 'a', newline='') as csvfile:
+        fieldnames = ['epoch', 'train_loss', 'train_acc', 'val_loss', 'val_acc', 'val_precision', 'val_recall', 'learning_rate']
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        
+        # Write header only if the file is new
+        if not file_exists:
+            writer.writeheader()
+        
+        writer.writerow({
+            'epoch': epoch,
+            'train_loss': train_loss,
+            'train_acc': train_acc,
+            'val_loss': val_loss,
+            'val_acc': val_acc,
+            'val_precision': val_precision,
+            'val_recall': val_recall,
+            'learning_rate': learning_rate
+        })
+
+# plot training metrics
+def plot_training_metrics(csv_file, session_dir):
+    # Load the CSV file into a pandas DataFrame
+    df = pd.read_csv(csv_file)
+    
+    # Extract data from the DataFrame
+    epochs_range = df['epoch']
+    acc = df['train_acc']
+    val_acc = df['val_acc']
+    loss = df['train_loss']
+    val_loss = df['val_loss']
+    
+    plt.figure(figsize=(8, 4))
+    
+    plt.subplot(1, 2, 1)
+    plt.plot(epochs_range, acc, label='Training Accuracy')
+    plt.plot(epochs_range, val_acc, label='Validation Accuracy')
+    plt.legend(loc='lower right')
+    plt.title('Training and Validation Accuracy')
+    
+    plt.subplot(1, 2, 2)
+    plt.plot(epochs_range, loss, label='Training Loss')
+    plt.plot(epochs_range, val_loss, label='Validation Loss')
+    plt.legend(loc='upper right')
+    plt.title('Training and Validation Loss')
+    
+    plt.savefig(os.path.join(session_dir, 'training_metrics.png'))
+    plt.close()
+
 
 
 def main():
@@ -178,6 +238,9 @@ def main():
     init_seed(cfg.get('seed', None))
     crop = cfg.get('crop', False)
 
+    # code to save training history
+    history_csv = os.path.join(cfg['experiment_folder'], 'training_history.csv')
+
     # check if GPU is available
     device = cfg.get('device', 'cpu')
     if device != 'cpu' and not torch.cuda.is_available():
@@ -186,22 +249,72 @@ def main():
 
     # initialize model and get class list
     model, classes, current_epoch = load_model(cfg['experiment_folder'], cfg['class_file'], device=device, architecture=cfg['architecture'])
-
     categories = dict([[x["class"], x["id"]] for _, x in classes.iterrows()])
 
     # load datasets
     train_dataset = pd.read_csv(cfg['training_set']).reset_index(drop=True)
     validate_dataset = pd.read_csv(cfg['validate_set']).reset_index(drop=True)
     
+    # compute optimal batch size
+    if 'batch_size' in cfg:
+        batch_size = cfg['batch_size']
+    else:
+        batch_size = find_optimal_batch_size(dataset = train_dataset,
+                                            categories = categories,
+                                            num_workers = cfg['num_workers'],
+                                            crop = crop,
+                                            resize_height = cfg['image_size'][0],
+                                            resize_width = cfg['image_size'][1],
+                                            augment = cfg.get('augment', False),
+                                            device = device,
+                                            model = model)
+    
     # initialize data loaders for training and validation set
-    dl_train = train_dataloader(train_dataset, categories, batch_size=cfg['batch_size'], workers=cfg['num_workers'], crop=crop, augment=cfg.get('augment', False))
-    dl_val = train_dataloader(validate_dataset, categories, batch_size=cfg['batch_size'], workers=cfg['num_workers'], crop=crop, augment=False)
+    dl_train = train_dataloader(train_dataset,
+                                categories,
+                                batch_size=batch_size,
+                                workers=cfg['num_workers'],
+                                crop=crop,
+                                resize_height=cfg['image_size'][0],
+                                resize_width=cfg['image_size'][1],
+                                augment=cfg.get('augment', False))
+    dl_val = train_dataloader(validate_dataset,
+                              categories,
+                              batch_size=batch_size,
+                              workers=cfg['num_workers'],
+                              crop=crop,
+                              resize_height=cfg['image_size'][0],
+                              resize_width=cfg['image_size'][1],
+                              augment=False)
+
+    # calculate class weights
+    use_class_weights = cfg.get('use_class_weights', False)
+    if use_class_weights:
+        print("Using class weights")
+        y_train = train_dataset['species'].map(dl_train.dataset.categories).values
+        class_indices = list(dl_train.dataset.categories.values())
+        class_weights = compute_class_weight(
+            class_weight='balanced',
+            classes=class_indices,
+            y=y_train)
+        scaling_factor = len(train_dataset) / sum(class_weights)
+        class_weights_tensor = torch.tensor(class_weights * scaling_factor, dtype=torch.float32).to(device)
+    else:
+        class_weights_tensor = None
 
     # set up model optimizer
     optim = SGD(model.parameters(), lr=cfg['learning_rate'], weight_decay=cfg['weight_decay'])
     
     # initialize scheduler
-    scheduler = ReduceLROnPlateau(optim, mode='min', factor=0.5, patience=5, verbose=True)
+    use_scheduler = cfg.get('use_scheduler', False)
+    if use_scheduler:
+        scheduler_patience = int(cfg.get('patience', 20) / 2) - 1 # give the scheduler the chance to lower the learning rate twice before early stopping
+        print(f"Using learning rate scheduler ReduceLROnPlateau (factor=0.5, patience={scheduler_patience})")
+        scheduler = ReduceLROnPlateau(optim, mode='min', factor=0.5, patience=scheduler_patience)
+        # print(f"Using learning rate scheduler ExponentialLR (gamma=0.5)") # DEBUG
+        # gamma = 0.95
+        # scheduler = ExponentialLR(optim, gamma=gamma)
+
 
     # initialize training arguments
     numEpochs = cfg['num_epochs']
@@ -217,9 +330,11 @@ def main():
     # training loop
     while current_epoch < numEpochs:
         current_epoch += 1
-        print(f'Epoch {current_epoch}/{numEpochs}')
+        print(f'\nEpoch {current_epoch}/{numEpochs}')
+        if use_scheduler:
+            print(f"Using learning rate : {scheduler.get_last_lr()[0]}")
 
-        loss_train, oa_train = train(dl_train, model, optim, device)
+        loss_train, oa_train = train(dl_train, model, optim, device, class_weights_tensor)
         loss_val, oa_val, precision, recall = validate(dl_val, model, device)
 
         # combine stats and save
@@ -230,8 +345,32 @@ def main():
             'oa_train': oa_train,
             'oa_val': oa_val,
             'precision': precision,
-            'recall': recall
+            'recall': recall,
+            'image_size': cfg['image_size'],
+            'architecture': cfg['architecture'],
+            'categories': categories,
+            'epoch': current_epoch   
         }
+        
+        # print stats
+        print(f"       train loss : {loss_train:.5f}")
+        print(f"         train OA : {oa_train:.5f}")
+        print(f"         val loss : {loss_val:.5f}")
+        print(f"           val OA : {oa_val:.5f}")
+        print(f"    val precision : {precision:.5f}")
+        print(f"       val recall : {recall:.5f}")
+        
+        # Write history and update plots
+        append_to_history_csv(history_csv,
+                              current_epoch,
+                              loss_train,
+                              oa_train,
+                              loss_val,
+                              oa_val,
+                              precision,
+                              recall,
+                              scheduler.get_last_lr()[0] if use_scheduler else cfg['learning_rate'])
+        plot_training_metrics(history_csv, cfg['experiment_folder'])
 
         # <current_epoch>.pt checkpoint saving every *checkpoint_frequency* epochs
         checkpoint = cfg.get('checkpoint_frequency', 10)
@@ -247,7 +386,7 @@ def main():
                 best_val_loss = loss_val
                 epochs_no_improve = 0
                 save_model(cfg['experiment_folder'], 'best', model, stats)
-                print(f"Current best model saved at epoch {current_epoch} with val loss {best_val_loss:.3f}, val OA {oa_val:.3f}, val precision {precision:.3f}, val recall {recall:.3f}")
+                print(f"Best model so far! Saved as best.pt.")
             else:
                 epochs_no_improve += 1
 
@@ -259,8 +398,10 @@ def main():
                 print(f"Early stopping triggered after {patience} epochs without improvement.")
                 break
         
-        # step the scheduler with the validation loss
-        scheduler.step(loss_val)
+        # step scheduler
+        if use_scheduler:
+            scheduler.step(loss_val) # DEBUG
+            # scheduler.step() # DEBUG
 
 if __name__ == '__main__':
     main()
