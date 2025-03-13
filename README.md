@@ -3,9 +3,7 @@
 
 This repository is forked from https://github.com/conservationtechlab/animl-py.
 
-I've tweaked the code a bit to make it work in my workflow.
-
-Original README below.
+I've tweaked the code a bit to make it work in my workflow. Feel free to use it! Original README below.
 
 ________________________________
 
