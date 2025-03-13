@@ -6,6 +6,11 @@
     2022 Benjamin Kellenberger
 '''
 
+<<<<<<< HEAD
+=======
+# TODO: get scheduler bool from config file... now it is hard coded.
+
+>>>>>>> 41c7fee5680ecdfd9cdb049c238a4cc499d9c941
 import argparse
 import yaml
 from tqdm import trange
@@ -306,6 +311,7 @@ def main():
     optim = SGD(model.parameters(), lr=cfg['learning_rate'], weight_decay=cfg['weight_decay'])
     
     # initialize scheduler
+<<<<<<< HEAD
     use_scheduler = cfg.get('use_scheduler', False)
     if use_scheduler:
         scheduler_patience = int(cfg.get('patience', 20) / 2) - 1 # give the scheduler the chance to lower the learning rate twice before early stopping
@@ -315,6 +321,9 @@ def main():
         # gamma = 0.95
         # scheduler = ExponentialLR(optim, gamma=gamma)
 
+=======
+    scheduler = ReduceLROnPlateau(optim, mode='min', factor=0.5, patience=3)
+>>>>>>> 41c7fee5680ecdfd9cdb049c238a4cc499d9c941
 
     # initialize training arguments
     numEpochs = cfg['num_epochs']
@@ -330,9 +339,14 @@ def main():
     # training loop
     while current_epoch < numEpochs:
         current_epoch += 1
+<<<<<<< HEAD
         print(f'\nEpoch {current_epoch}/{numEpochs}')
         if use_scheduler:
             print(f"Using learning rate : {scheduler.get_last_lr()[0]}")
+=======
+        print(f'Epoch {current_epoch}/{numEpochs}')
+        print(f"Using learning rate : {scheduler.get_last_lr()[0]}")
+>>>>>>> 41c7fee5680ecdfd9cdb049c238a4cc499d9c941
 
         loss_train, oa_train = train(dl_train, model, optim, device, class_weights_tensor)
         loss_val, oa_val, precision, recall = validate(dl_val, model, device)
@@ -386,7 +400,15 @@ def main():
                 best_val_loss = loss_val
                 epochs_no_improve = 0
                 save_model(cfg['experiment_folder'], 'best', model, stats)
+<<<<<<< HEAD
                 print(f"Best model so far! Saved as best.pt.")
+=======
+                print(f"Current best model saved at epoch {current_epoch} with ...")
+                print(f"     val loss : {best_val_loss:.5f}")
+                print(f"       val OA : {oa_val:.5f}")
+                print(f"val precision : {precision:.5f}")
+                print(f"   val recall : {recall:.5f}\n")
+>>>>>>> 41c7fee5680ecdfd9cdb049c238a4cc499d9c941
             else:
                 epochs_no_improve += 1
 
