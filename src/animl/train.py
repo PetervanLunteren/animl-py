@@ -234,7 +234,13 @@ def main():
 
     # load config
     print(f'Using config "{args.config}"')
-    cfg = yaml.safe_load(open(args.config, 'r'))
+    with open(args.config, 'r') as f:
+        cfg = yaml.safe_load(f)
+
+    # save config to store for later use
+    os.makedirs(cfg['experiment_folder'], exist_ok=True)
+    with open(os.path.join(cfg['experiment_folder'], 'used-config.yml'), 'w') as f:
+        yaml.safe_dump(cfg, f)
 
     # init random number generator seed (set at the start)
     init_seed(cfg.get('seed', None))
@@ -387,11 +393,12 @@ def main():
                 best_val_loss = loss_val
                 epochs_no_improve = 0
                 save_model(cfg['experiment_folder'], 'best', model, stats)
-                print(f"Current best model saved at epoch {current_epoch} with ...")
-                print(f"     val loss : {best_val_loss:.5f}")
-                print(f"       val OA : {oa_val:.5f}")
-                print(f"val precision : {precision:.5f}")
-                print(f"   val recall : {recall:.5f}\n")
+                print(f"\nCurrent best model saved at epoch {current_epoch} with ...")
+                print(f"         val loss : {best_val_loss:.5f}")
+                print(f"           val OA : {oa_val:.5f}")
+                print(f"    val precision : {precision:.5f}")
+                print(f"       val recall : {recall:.5f}\n")
+
             else:
                 epochs_no_improve += 1
 
