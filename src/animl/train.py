@@ -219,7 +219,27 @@ def plot_training_metrics(csv_file, session_dir):
     plt.savefig(os.path.join(session_dir, 'training_metrics.png'))
     plt.close()
 
-
+# finds the last iteration of a subfolder in experiment_folder and creates the next one
+def create_next_run_dir(experiment_folder: str) -> str:
+    
+    # find existing run_{d} folders
+    os.makedirs(experiment_folder, exist_ok=True)
+    existing_runs = []
+    for folder in os.listdir(experiment_folder):
+        folder_path = os.path.join(experiment_folder, folder)
+        if folder.startswith("run_") and os.path.isdir(folder_path):
+            try:
+                run_num = int(folder.split("_")[1])
+                existing_runs.append(run_num)
+            except ValueError:
+                pass  # ignore non-numeric run directories
+    
+    # determine next run number
+    next_run_num = max(existing_runs, default=0) + 1
+    next_run_folder = os.path.join(experiment_folder, f"run_{next_run_num}")
+    os.makedirs(next_run_folder, exist_ok=True)
+    
+    return next_run_folder
 
 def main():
     '''
@@ -233,13 +253,20 @@ def main():
     args = parser.parse_args()
 
     # load config
-    print(f'Using config "{args.config}"')
+    print(f'\n\nUsing config "{args.config}"')
     with open(args.config, 'r') as f:
         cfg = yaml.safe_load(f)
 
+    # ensure 'experiment_folder' key exists
+    if 'experiment_folder' not in cfg:
+        raise KeyError("Config file must contain 'experiment_folder' key.")
+
+    # create next run dir
+    run_dir = create_next_run_dir(cfg['experiment_folder'])
+    print(f'Created dir "{run_dir}" to store files for this run')
+
     # save config to store for later use
-    os.makedirs(cfg['experiment_folder'], exist_ok=True)
-    with open(os.path.join(cfg['experiment_folder'], 'used-config.yml'), 'w') as f:
+    with open(os.path.join(run_dir, 'used-config.yml'), 'w') as f:
         yaml.safe_dump(cfg, f)
 
     # init random number generator seed (set at the start)
@@ -247,7 +274,7 @@ def main():
     crop = cfg.get('crop', False)
 
     # code to save training history
-    history_csv = os.path.join(cfg['experiment_folder'], 'training_history.csv')
+    history_csv = os.path.join(run_dir, 'training_history.csv')
 
     # check if GPU is available
     device = cfg.get('device', 'cpu')
@@ -256,7 +283,7 @@ def main():
         device = 'cpu'
 
     # initialize model and get class list
-    model, classes, current_epoch = load_model(cfg['experiment_folder'], cfg['class_file'], device=device, architecture=cfg['architecture'])
+    model, classes, current_epoch = load_model(run_dir, cfg['class_file'], device=device, architecture=cfg['architecture'])
     categories = dict([[x["class"], x["id"]] for _, x in classes.iterrows()])
 
     # load datasets
@@ -377,13 +404,13 @@ def main():
                               precision,
                               recall,
                               scheduler.get_last_lr()[0] if use_scheduler else cfg['learning_rate'])
-        plot_training_metrics(history_csv, cfg['experiment_folder'])
+        plot_training_metrics(history_csv, run_dir)
 
         # <current_epoch>.pt checkpoint saving every *checkpoint_frequency* epochs
         checkpoint = cfg.get('checkpoint_frequency', 10)
         # experiment.log_metrics(stats, step=current_epoch)
         if current_epoch % checkpoint == 0:
-            save_model(cfg['experiment_folder'], current_epoch, model, stats)
+            save_model(run_dir, current_epoch, model, stats)
         
         # if user specified early stopping
         if early_stopping:
@@ -392,7 +419,7 @@ def main():
             if loss_val < best_val_loss:
                 best_val_loss = loss_val
                 epochs_no_improve = 0
-                save_model(cfg['experiment_folder'], 'best', model, stats)
+                save_model(run_dir, 'best', model, stats)
                 print(f"\nCurrent best model saved at epoch {current_epoch} with ...")
                 print(f"         val loss : {best_val_loss:.5f}")
                 print(f"           val OA : {oa_val:.5f}")
@@ -403,7 +430,7 @@ def main():
                 epochs_no_improve += 1
 
             # last.pt saving
-            save_model(cfg['experiment_folder'], 'last', model, stats)
+            save_model(run_dir, 'last', model, stats)
         
             # check patience
             if epochs_no_improve >= patience:

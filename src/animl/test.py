@@ -74,6 +74,30 @@ def test(data_loader, model, device='cpu'):
             progressBar.update(1)
 
     return pred_labels, true_labels, confidences, filepaths
+    
+# finds the last iteration of a subfolder in experiment_folder and returns its path.
+def find_last_run_dir(experiment_folder: str) -> str:
+    if not os.path.exists(experiment_folder):
+        return None  # folder doesn't exist, no runs yet
+    
+    # find existing run_X folders
+    existing_runs = []
+    for folder in os.listdir(experiment_folder):
+        folder_path = os.path.join(experiment_folder, folder)
+        if folder.startswith("run_") and os.path.isdir(folder_path):
+            try:
+                run_num = int(folder.split("_")[1])
+                existing_runs.append((run_num, folder_path))
+            except ValueError:
+                pass  # ignore non-numeric run directories
+
+    if not existing_runs:
+        return None  # No runs found
+    
+    # get the folder with the highest run number
+    last_run_path = max(existing_runs, key=lambda x: x[0])[1]
+    
+    return last_run_path
 
 def main():
     '''
@@ -97,8 +121,16 @@ def main():
         print(f'WARNING: device set to "{device}" but CUDA not available; falling back to CPU...')
         device = 'cpu'
 
+    # check run dir
+    if "active_model" in cfg:
+        run_dir = os.path.dirname(cfg['active_model'])
+        print(f'Active model specified in config. Testing on run directory: "{run_dir}"')
+    else:
+        run_dir = find_last_run_dir(cfg['experiment_folder'])
+        print(f'No active model specified in config. Defaulting to last run directory: "{run_dir}"')
+
     # initialize model and get class list
-    active_model = cfg.get('active_model', os.path.join(cfg['experiment_folder'], 'best.pt'))
+    active_model = os.path.join(run_dir, 'best.pt')
     model, classes = load_model(active_model, cfg['class_file'], device=device, architecture=cfg['architecture'])
     categories = dict([[x["class"], x["id"]] for _, x in classes.iterrows()])
 
@@ -125,13 +157,13 @@ def main():
                             'Predicted': pred,
                             'Confidence': conf,
                             'Correct': corr})
-    results.to_csv(cfg['experiment_folder'] + "/test_results.csv")
+    results.to_csv(run_dir + "/test_results.csv")
     print(f"Creating: .\\test_results.csv")
 
     # create confusion matrix
     cm = confusion_matrix(true, pred)
     confuse = pd.DataFrame(cm, columns=classes['class'], index=classes['class'])
-    confuse.to_csv(cfg['experiment_folder'] + "/confusion_matrix.csv")
+    confuse.to_csv(run_dir + "/confusion_matrix.csv")
 
 
 if __name__ == '__main__':
