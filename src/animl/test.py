@@ -75,29 +75,29 @@ def test(data_loader, model, device='cpu'):
 
     return pred_labels, true_labels, confidences, filepaths
     
-# finds the last iteration of a subfolder in experiment_folder and returns its path.
-def find_last_run_dir(experiment_folder: str) -> str:
-    if not os.path.exists(experiment_folder):
-        return None  # folder doesn't exist, no runs yet
+# # finds the last iteration of a subfolder in experiment_folder and returns its path.
+# def find_last_run_dir(experiment_folder: str) -> str:
+#     if not os.path.exists(experiment_folder):
+#         return None  # folder doesn't exist, no runs yet
     
-    # find existing run_X folders
-    existing_runs = []
-    for folder in os.listdir(experiment_folder):
-        folder_path = os.path.join(experiment_folder, folder)
-        if folder.startswith("run_") and os.path.isdir(folder_path):
-            try:
-                run_num = int(folder.split("_")[1])
-                existing_runs.append((run_num, folder_path))
-            except ValueError:
-                pass  # ignore non-numeric run directories
+#     # find existing run_X folders
+#     existing_runs = []
+#     for folder in os.listdir(experiment_folder):
+#         folder_path = os.path.join(experiment_folder, folder)
+#         if folder.startswith("run_") and os.path.isdir(folder_path):
+#             try:
+#                 run_num = int(folder.split("_")[1])
+#                 existing_runs.append((run_num, folder_path))
+#             except ValueError:
+#                 pass  # ignore non-numeric run directories
 
-    if not existing_runs:
-        return None  # No runs found
+#     if not existing_runs:
+#         return None  # No runs found
     
-    # get the folder with the highest run number
-    last_run_path = max(existing_runs, key=lambda x: x[0])[1]
+#     # get the folder with the highest run number
+#     last_run_path = max(existing_runs, key=lambda x: x[0])[1]
     
-    return last_run_path
+#     return last_run_path
 
 def main():
     '''
@@ -121,13 +121,8 @@ def main():
         print(f'WARNING: device set to "{device}" but CUDA not available; falling back to CPU...')
         device = 'cpu'
 
-    # check run dir
-    if "active_model" in cfg:
-        run_dir = os.path.dirname(cfg['active_model'])
-        print(f'Active model specified in config. Testing on run directory: "{run_dir}"')
-    else:
-        run_dir = find_last_run_dir(cfg['experiment_folder'])
-        print(f'No active model specified in config. Defaulting to last run directory: "{run_dir}"')
+    # read run dir from config location
+    run_dir = os.path.dirname(args.config)
 
     # initialize model and get class list
     active_model = os.path.join(run_dir, 'best.pt')
@@ -159,12 +154,6 @@ def main():
                             'Correct': corr})
     results.to_csv(run_dir + "/test_results.csv")
     print(f"Creating: .\\test_results.csv")
-
-    # create confusion matrix
-    cm = confusion_matrix(true, pred)
-    confuse = pd.DataFrame(cm, columns=classes['class'], index=classes['class'])
-    confuse.to_csv(run_dir + "/confusion_matrix.csv")
-
 
 if __name__ == '__main__':
     main()
