@@ -266,7 +266,8 @@ def main():
     print(f'Created dir "{run_dir}" to store files for this run')
 
     # save config to store for later use
-    with open(os.path.join(run_dir, 'used-config.yml'), 'w') as f:
+    used_config_fpath = os.path.join(run_dir, 'used-config.yml')
+    with open(used_config_fpath, 'w') as f:
         yaml.safe_dump(cfg, f)
 
     # init random number generator seed (set at the start)
@@ -441,6 +442,10 @@ def main():
         if use_scheduler:
             scheduler.step(loss_val) # DEBUG
             # scheduler.step() # DEBUG
+    
+    # after training, directly test and compute metrics on the test set
+    subprocess.run(['python', '-m', 'animl.test', f'--config={used_config_fpath}'], check=True)
+    subprocess.run(['python', 'C:\\Peter\\training-utils\\scripts\\val-test-set.py', used_config_fpath], check=True)
 
 if __name__ == '__main__':
     main()
