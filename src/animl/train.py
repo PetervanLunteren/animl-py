@@ -17,6 +17,7 @@ import torch.nn as nn
 import os
 import csv
 import torch
+import subprocess
 from torch.backends import cudnn
 from torch.optim import SGD
 import matplotlib.pyplot as plt
