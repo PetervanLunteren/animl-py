@@ -129,31 +129,59 @@ def main():
     model, classes = load_model(active_model, cfg['class_file'], device=device, architecture=cfg['architecture'])
     categories = dict([[x["class"], x["id"]] for _, x in classes.iterrows()])
 
-    # initialize data loaders for training and validation set 
-    if 'test_set' not in cfg: print('No test set specified in config file. Will continue to test on validation set.')
-    test_set = cfg.get('test_set', cfg['validate_set'])
-    test_dataset = pd.read_csv(test_set).reset_index(drop=True)
-    dl_test = train_dataloader(test_dataset, categories, batch_size=cfg['batch_size'], workers=cfg['num_workers'], crop=crop)
+    # initialize data loaders for test set 
+    if 'test_set' in cfg:
+        print('\nTest set specified in config file. Testing on test set...\n')
+        test_set = cfg['test_set']
+        test_dataset = pd.read_csv(test_set).reset_index(drop=True)
+        dl_test = train_dataloader(test_dataset, categories, batch_size=cfg['batch_size'], workers=cfg['num_workers'], crop=crop)
 
-    # get predictions
-    pred, true, conf, paths = test(dl_test, model, device)
-    pred = np.asarray(pred)
-    true = np.asarray(true)
-    conf = np.asarray(conf)
-    corr = (pred == true).tolist()
+        # get predictions
+        pred, true, conf, paths = test(dl_test, model, device)
+        pred = np.asarray(pred)
+        true = np.asarray(true)
+        conf = np.asarray(conf)
+        corr = (pred == true).tolist()
 
-    # print accuracy
-    oa = np.mean((pred == true))
-    print(f"Test accuracy: {oa}")
+        # print accuracy
+        oa = np.mean((pred == true))
+        print(f"Test accuracy: {oa}")
 
-    # save test results
-    results = pd.DataFrame({'FilePath': paths,
-                            'Ground Truth': true,
-                            'Predicted': pred,
-                            'Confidence': conf,
-                            'Correct': corr})
-    results.to_csv(run_dir + "/test_results.csv")
-    print(f"Creating: .\\test_results.csv")
+        # save test results
+        results = pd.DataFrame({'FilePath': paths,
+                                'Ground Truth': true,
+                                'Predicted': pred,
+                                'Confidence': conf,
+                                'Correct': corr})
+        results.to_csv(run_dir + "/test_results.csv")
+        print(f"Creating: .\\test_results.csv")
+
+    # initialize data loaders for validation set 
+    if 'validate_set' in cfg:
+        print('\nValidation set specified in config file. Testing on validation set...\n')
+        val_set = cfg['validate_set']
+        val_dataset = pd.read_csv(val_set).reset_index(drop=True)
+        dl_test = train_dataloader(val_dataset, categories, batch_size=cfg['batch_size'], workers=cfg['num_workers'], crop=crop)
+
+        # get predictions
+        pred, true, conf, paths = test(dl_test, model, device)
+        pred = np.asarray(pred)
+        true = np.asarray(true)
+        conf = np.asarray(conf)
+        corr = (pred == true).tolist()
+
+        # print accuracy
+        oa = np.mean((pred == true))
+        print(f"Test accuracy: {oa}")
+
+        # save test results
+        results = pd.DataFrame({'FilePath': paths,
+                                'Ground Truth': true,
+                                'Predicted': pred,
+                                'Confidence': conf,
+                                'Correct': corr})
+        results.to_csv(run_dir + "/val_results.csv")
+        print(f"Creating: .\\val_results.csv")
 
 if __name__ == '__main__':
     main()
