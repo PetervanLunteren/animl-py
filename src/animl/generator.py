@@ -344,47 +344,6 @@ class LegacyGenerator(Dataset):
         return img, file
 '''
 
-
-# function to find optimal batch size
-def find_optimal_batch_size(dataset, categories, num_workers, crop, resize_height, resize_width, augment, device, model, start=1, max_power=10):
-    max_batch_size = 0
-    print("Finding optimal batch size...")
-    for i in range(start, max_power + 1):
-        batch_size = 2 ** i  # Double the batch size
-        try:
-            # Create DataLoader
-            dataloader = train_dataloader(dataset,
-                                            categories,
-                                            batch_size=batch_size,
-                                            workers=num_workers,
-                                            crop=crop,
-                                            resize_height=resize_height,
-                                            resize_width=resize_width,
-                                            augment=augment)
-            
-            # Get a single batch
-            images, labels, *extra = next(iter(dataloader))
-            images, labels = images.to(device), labels.to(device)
-            
-            # Test forward pass
-            model(images)
-            
-            # If successful, update max_batch_size
-            max_batch_size = batch_size
-            print(f"Batch size {batch_size} succeeded.")
-        
-        except RuntimeError as e:
-            if 'out of memory' in str(e):
-                print(f"Batch size {batch_size} failed due to OOM.")
-                torch.cuda.empty_cache()  # Free GPU memory
-                gc.collect()              # Free CPU memory
-                break
-            else:
-                raise e  # Re-raise other errors
-    
-    print(f"Optimal batch size: {max_batch_size}")
-    return max_batch_size
-
 def train_dataloader(manifest, classes, batch_size=1, workers=1, file_col="FilePath",
                      crop=False, resize_height=299, resize_width=299, augment=False):
     '''
