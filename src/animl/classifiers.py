@@ -37,7 +37,7 @@ def save_model(out_dir, epoch, model, stats):
     torch.save(stats, open(f'{out_dir}/{epoch}.pt', 'wb'))
 
 
-def load_model(model_path, class_file, device=None, architecture="CTL"):
+def load_model(model_path, class_file, device=None, architecture="CTL", num_tune_layers=None):
     '''
     Creates a model instance and loads the latest model state weights.
 
@@ -71,11 +71,11 @@ def load_model(model_path, class_file, device=None, architecture="CTL"):
         model_path = str(model_path)
         start_epoch = 0
         if (architecture == "CTL") or (architecture == "efficientnet_v2_m"):
-            model = EfficientNetV2M(len(classes))
+            model = EfficientNetV2M(len(classes), num_tune_layers=num_tune_layers)
         elif architecture == "efficientnet_v2_s":
-            model = EfficientNetV2S(len(classes))
+            model = EfficientNetV2S(len(classes), num_tune_layers=num_tune_layers)
         elif architecture == "convnext_base":
-            model = ConvNeXtBase(len(classes))
+            model = ConvNeXtBase(len(classes), num_tune_layers=num_tune_layers)
         else:  # can only resume models from a directory at this time
             raise AssertionError('Please provide the correct model')
 
@@ -165,79 +165,136 @@ def load_model(model_path, class_file, device=None, architecture="CTL"):
     else:
         raise ValueError("Model not found at given path")
 
+# Efficient Net v2 medium
 class EfficientNetV2M(nn.Module):
 
-    def __init__(self, num_classes, tune=True):
+    def __init__(self, num_classes, num_tune_layers=None):
         '''
             Construct the EfficientNet v2 medium model architecture.
         '''
         super(EfficientNetV2M, self).__init__()
         self.avgpool = nn.AdaptiveAvgPool2d(1)
 
-        self.model = efficientnet.efficientnet_v2_m(weights=efficientnet.EfficientNet_V2_M_Weights.DEFAULT)       # "pretrained": use weights pre-trained on ImageNet
-        if tune:
+        # load pretrained EfficientNetV2-M model
+        self.model = efficientnet.efficientnet_v2_m(weights=efficientnet.EfficientNet_V2_M_Weights.DEFAULT)
+
+        # if the number of layers to tune is not specified, we'll tune all of them
+        if num_tune_layers is None:
             for params in self.model.parameters():
                 params.requires_grad = True
+        
+        # if the number of layers to tune is specified
+        else:
 
+            # freeze all layers initially
+            for param in self.model.parameters():
+                param.requires_grad = False
+
+            # unfreeze last n layers of the backbone
+            layers = list(self.model.features.children())
+            for layer in layers[-num_tune_layers:]:
+                for param in layer.parameters():
+                    param.requires_grad = True
+
+            # also unfreeze classifier head
+            for param in self.model.classifier.parameters():
+                param.requires_grad = True
+
+        # modify classifier head
         num_ftrs = self.model.classifier[1].in_features
-
         self.model.classifier[1] = nn.Linear(in_features=num_ftrs, out_features=num_classes)
 
     def forward(self, x):
         '''
             Forward pass (prediction)
         '''
-        # x.size(): [B x 3 x W x H]
         x = self.model.features(x)
         x = self.avgpool(x)
         x = torch.flatten(x, 1)
-
-        prediction = self.model.classifier(x)  # prediction.size(): [B x num_classes]
-
+        prediction = self.model.classifier(x)
         return prediction
-    
+
+# Efficient Net v2 small 
 class EfficientNetV2S(nn.Module):
 
-    def __init__(self, num_classes, tune=True):
+    def __init__(self, num_classes, num_tune_layers=None):
         '''
             Construct the EfficientNet v2 small model architecture.
         '''
         super(EfficientNetV2S, self).__init__()
         self.avgpool = nn.AdaptiveAvgPool2d(1)
 
-        self.model = efficientnet.efficientnet_v2_s(weights=efficientnet.EfficientNet_V2_S_Weights.DEFAULT)       # "pretrained": use weights pre-trained on ImageNet
-        if tune:
+        # load pretrained EfficientNetV2-S model
+        self.model = efficientnet.efficientnet_v2_s(weights=efficientnet.EfficientNet_V2_S_Weights.DEFAULT)
+
+        # if the number of layers to tune is not specified, we'll tune all of them
+        if num_tune_layers is None:
             for params in self.model.parameters():
                 params.requires_grad = True
 
-        num_ftrs = self.model.classifier[1].in_features
+        # if the number of layers to tune is specified
+        else:
 
+            # freeze all layers initially
+            for param in self.model.parameters():
+                param.requires_grad = False
+
+            # unfreeze last 6 layers of the backbone
+            layers = list(self.model.features.children())
+            for layer in layers[-num_tune_layers:]:
+                for param in layer.parameters():
+                    param.requires_grad = True
+
+            # also unfreeze classifier head
+            for param in self.model.classifier.parameters():
+                param.requires_grad = True
+
+        # modify classifier head
+        num_ftrs = self.model.classifier[1].in_features
         self.model.classifier[1] = nn.Linear(in_features=num_ftrs, out_features=num_classes)
 
     def forward(self, x):
         '''
             Forward pass (prediction)
         '''
-        # x.size(): [B x 3 x W x H]
         x = self.model.features(x)
         x = self.avgpool(x)
         x = torch.flatten(x, 1)
-
-        prediction = self.model.classifier(x)  # prediction.size(): [B x num_classes]
-
+        prediction = self.model.classifier(x)
         return prediction
-    
+
+# ConvNext model architechture
 class ConvNeXtBase(nn.Module):
-    def __init__(self, num_classes, tune=True):
+    def __init__(self, num_classes, num_tune_layers=None):
         '''
         Construct the ConvNeXt-Base model architecture.
         '''
         super(ConvNeXtBase, self).__init__()
 
-        self.model = convnext_base(weights=ConvNeXt_Base_Weights.DEFAULT) # load the ConvNeXt-Base model pre-trained on ImageNet 1K
-        if not tune:
+        # load the ConvNeXt-Base model pre-trained on ImageNet 1K
+        self.model = convnext_base(weights=ConvNeXt_Base_Weights.DEFAULT) 
+        
+        # if the number of layers to tune is not specified, we'll tune all of them
+        if num_tune_layers is None:
+            for params in self.model.parameters():
+                params.requires_grad = True
+        
+        # if the number of layers to tune is specified
+        else:
+
+            # freeze all layers initially
             for param in self.model.parameters():
                 param.requires_grad = False
+
+            # unfreeze last n layers of the backbone
+            layers = list(self.model.features.children())
+            for layer in layers[-num_tune_layers:]:
+                for param in layer.parameters():
+                    param.requires_grad = True
+
+            # also unfreeze classifier head
+            for param in self.model.classifier.parameters():
+                param.requires_grad = True
 
         # Replace the last classifier layer
         num_ftrs = self.model.classifier[2].in_features

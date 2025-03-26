@@ -284,8 +284,17 @@ def main():
         print(f'WARNING: device set to "{device}" but CUDA not available; falling back to CPU...')
         device = 'cpu'
 
+    # check if user specified the number of layers to tune
+    num_tune_layers = cfg.get('num_tune_layers', None)
+    if not num_tune_layers is None:
+        print(f"Freezing all backbone layers except for the last {num_tune_layers} layers")
+
     # initialize model and get class list
-    model, classes, current_epoch = load_model(run_dir, cfg['class_file'], device=device, architecture=cfg['architecture'])
+    model, classes, current_epoch = load_model(run_dir,
+                                               cfg['class_file'],
+                                               device=device,
+                                               architecture=cfg['architecture'],
+                                               num_tune_layers=num_tune_layers)
     categories = dict([[x["class"], x["id"]] for _, x in classes.iterrows()])
 
     # load datasets
@@ -446,7 +455,7 @@ def main():
     
     # after training, directly test and compute metrics on the test set
     subprocess.run(['python', '-m', 'animl.test', f'--config={used_config_fpath}'], check=True)
-    subprocess.run(['python', 'C:\\Peter\\training-utils\\scripts\\val-test-set.py', used_config_fpath], check=True)
+    subprocess.run(['python', 'C:\\Peter\\training-utils\\scripts\\val-test-set.py', 'animl', used_config_fpath], check=True)
 
 if __name__ == '__main__':
     main()
