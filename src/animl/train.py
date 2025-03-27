@@ -309,11 +309,6 @@ def main():
     run_dir = create_next_run_dir(cfg['experiment_folder'])
     print(f'Created dir "{run_dir}" to store files for this run')
 
-    # save config to store for later use
-    used_config_fpath = os.path.join(run_dir, 'used-config.yml')
-    with open(used_config_fpath, 'w') as f:
-        yaml.safe_dump(cfg, f)
-
     # init random number generator seed (set at the start)
     init_seed(cfg.get('seed', None))
     crop = cfg.get('crop', False)
@@ -349,9 +344,15 @@ def main():
         batch_size = cfg['batch_size']
     else:
         print(f"Batch size not specified in config file. Estimating max batch size based on image size {cfg['image_size']}...")
-        batch_size = estimate_max_batch_size(cfg['image_size'], model_parameters = model_num_params[cfg['architecture']])
+        batch_size = estimate_max_batch_size(cfg['image_size'], model_parameters = model_num_params[cfg['architecture']]) # estimate
+        cfg['batch_size'] = batch_size # update config
         print(f"Max batch size estimated to be {batch_size}")
-    
+
+    # save config to store for later use
+    used_config_fpath = os.path.join(run_dir, 'used-config.yml')
+    with open(used_config_fpath, 'w') as f:
+        yaml.safe_dump(cfg, f)
+
     # initialize data loaders for training and validation set
     dl_train = train_dataloader(train_dataset,
                                 categories,
