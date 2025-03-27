@@ -71,11 +71,11 @@ def load_model(model_path, class_file, device=None, architecture="CTL", num_tune
         model_path = str(model_path)
         start_epoch = 0
         if (architecture == "CTL") or (architecture == "efficientnet_v2_m"):
-            model = EfficientNetV2M(len(classes), num_tune_layers=num_tune_layers)
+            model = EfficientNetV2M(len(classes), tune=True, num_tune_layers=num_tune_layers)
         elif architecture == "efficientnet_v2_s":
-            model = EfficientNetV2S(len(classes), num_tune_layers=num_tune_layers)
+            model = EfficientNetV2S(len(classes), tune=True, num_tune_layers=num_tune_layers)
         elif architecture == "convnext_base":
-            model = ConvNeXtBase(len(classes), num_tune_layers=num_tune_layers)
+            model = ConvNeXtBase(len(classes), tune=True, num_tune_layers=num_tune_layers)
         else:  # can only resume models from a directory at this time
             raise AssertionError('Please provide the correct model')
 
@@ -168,7 +168,7 @@ def load_model(model_path, class_file, device=None, architecture="CTL", num_tune
 # Efficient Net v2 medium
 class EfficientNetV2M(nn.Module):
 
-    def __init__(self, num_classes, num_tune_layers=None):
+    def __init__(self, num_classes, tune=True, num_tune_layers=None):
         '''
             Construct the EfficientNet v2 medium model architecture.
         '''
@@ -178,27 +178,30 @@ class EfficientNetV2M(nn.Module):
         # load pretrained EfficientNetV2-M model
         self.model = efficientnet.efficientnet_v2_m(weights=efficientnet.EfficientNet_V2_M_Weights.DEFAULT)
 
-        # if the number of layers to tune is not specified, we'll tune all of them
-        if num_tune_layers is None:
-            for params in self.model.parameters():
-                params.requires_grad = True
-        
-        # if the number of layers to tune is specified
-        else:
+        # do we want to train and update params?
+        if tune:
 
-            # freeze all layers initially
-            for param in self.model.parameters():
-                param.requires_grad = False
+            # if the number of layers to tune is not specified, we'll tune all of them
+            if num_tune_layers is None:
+                for params in self.model.parameters():
+                    params.requires_grad = True
+            
+            # if the number of layers to tune is specified
+            else:
 
-            # unfreeze last n layers of the backbone
-            layers = list(self.model.features.children())
-            for layer in layers[-num_tune_layers:]:
-                for param in layer.parameters():
+                # freeze all layers initially
+                for param in self.model.parameters():
+                    param.requires_grad = False
+
+                # unfreeze last n layers of the backbone
+                layers = list(self.model.features.children())
+                for layer in layers[-num_tune_layers:]:
+                    for param in layer.parameters():
+                        param.requires_grad = True
+
+                # also unfreeze classifier head
+                for param in self.model.classifier.parameters():
                     param.requires_grad = True
-
-            # also unfreeze classifier head
-            for param in self.model.classifier.parameters():
-                param.requires_grad = True
 
         # modify classifier head
         num_ftrs = self.model.classifier[1].in_features
@@ -217,7 +220,7 @@ class EfficientNetV2M(nn.Module):
 # Efficient Net v2 small 
 class EfficientNetV2S(nn.Module):
 
-    def __init__(self, num_classes, num_tune_layers=None):
+    def __init__(self, num_classes, tune=True, num_tune_layers=None):
         '''
             Construct the EfficientNet v2 small model architecture.
         '''
@@ -227,27 +230,30 @@ class EfficientNetV2S(nn.Module):
         # load pretrained EfficientNetV2-S model
         self.model = efficientnet.efficientnet_v2_s(weights=efficientnet.EfficientNet_V2_S_Weights.DEFAULT)
 
-        # if the number of layers to tune is not specified, we'll tune all of them
-        if num_tune_layers is None:
-            for params in self.model.parameters():
-                params.requires_grad = True
+        # do we want to train and update params?
+        if tune:
 
-        # if the number of layers to tune is specified
-        else:
+            # if the number of layers to tune is not specified, we'll tune all of them
+            if num_tune_layers is None:
+                for params in self.model.parameters():
+                    params.requires_grad = True
 
-            # freeze all layers initially
-            for param in self.model.parameters():
-                param.requires_grad = False
+            # if the number of layers to tune is specified
+            else:
 
-            # unfreeze last 6 layers of the backbone
-            layers = list(self.model.features.children())
-            for layer in layers[-num_tune_layers:]:
-                for param in layer.parameters():
+                # freeze all layers initially
+                for param in self.model.parameters():
+                    param.requires_grad = False
+
+                # unfreeze last 6 layers of the backbone
+                layers = list(self.model.features.children())
+                for layer in layers[-num_tune_layers:]:
+                    for param in layer.parameters():
+                        param.requires_grad = True
+
+                # also unfreeze classifier head
+                for param in self.model.classifier.parameters():
                     param.requires_grad = True
-
-            # also unfreeze classifier head
-            for param in self.model.classifier.parameters():
-                param.requires_grad = True
 
         # modify classifier head
         num_ftrs = self.model.classifier[1].in_features
@@ -265,7 +271,7 @@ class EfficientNetV2S(nn.Module):
 
 # ConvNext model architechture
 class ConvNeXtBase(nn.Module):
-    def __init__(self, num_classes, num_tune_layers=None):
+    def __init__(self, num_classes, tune=True, num_tune_layers=None):
         '''
         Construct the ConvNeXt-Base model architecture.
         '''
@@ -273,28 +279,31 @@ class ConvNeXtBase(nn.Module):
 
         # load the ConvNeXt-Base model pre-trained on ImageNet 1K
         self.model = convnext_base(weights=ConvNeXt_Base_Weights.DEFAULT) 
-        
-        # if the number of layers to tune is not specified, we'll tune all of them
-        if num_tune_layers is None:
-            for params in self.model.parameters():
-                params.requires_grad = True
-        
-        # if the number of layers to tune is specified
-        else:
 
-            # freeze all layers initially
-            for param in self.model.parameters():
-                param.requires_grad = False
+        # do we want to train and update params?
+        if tune:
 
-            # unfreeze last n layers of the backbone
-            layers = list(self.model.features.children())
-            for layer in layers[-num_tune_layers:]:
-                for param in layer.parameters():
+            # if the number of layers to tune is not specified, we'll tune all of them
+            if num_tune_layers is None:
+                for params in self.model.parameters():
+                    params.requires_grad = True
+            
+            # if the number of layers to tune is specified
+            else:
+
+                # freeze all layers initially
+                for param in self.model.parameters():
+                    param.requires_grad = False
+
+                # unfreeze last n layers of the backbone
+                layers = list(self.model.features.children())
+                for layer in layers[-num_tune_layers:]:
+                    for param in layer.parameters():
+                        param.requires_grad = True
+
+                # also unfreeze classifier head
+                for param in self.model.classifier.parameters():
                     param.requires_grad = True
-
-            # also unfreeze classifier head
-            for param in self.model.classifier.parameters():
-                param.requires_grad = True
 
         # Replace the last classifier layer
         num_ftrs = self.model.classifier[2].in_features
