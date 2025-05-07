@@ -297,8 +297,13 @@ def main():
     train_dataset = pd.read_csv(cfg['training_set']).reset_index(drop=True)
     validate_dataset = pd.read_csv(cfg['validate_set']).reset_index(drop=True)
     
-    # batch size
+    # fetch and log
     batch_size = cfg['batch_size']
+    print(f"Using batch size {batch_size}")
+    print(f"Using image size {cfg['image_size']}")
+    print(f"Using architecture {cfg['architecture']}")
+    print(f"Using dataset '{os.path.dirname(cfg['training_set'])}'")
+    print(f"Using learning rate {cfg['learning_rate']}")
 
     # save config to store for later use
     used_config_fpath = os.path.join(run_dir, 'used-config.yml')
