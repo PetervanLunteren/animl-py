@@ -243,49 +243,6 @@ def create_next_run_dir(experiment_folder: str) -> str:
     
     return next_run_folder
 
-# calculate the max possible batch size given the set image size and fixed GPU constraints
-def estimate_max_batch_size(image_size, model_parameters, channels=3, dtype=torch.float32, gpu_memory_gb=12, safety_factor=0.8):
-    """
-    Estimate the maximum batch size that fits into the GPU memory using a more accurate formula.
-    A safety factor is applied to reduce the result to be more conservative.
-    
-    Parameters:
-    - image_size (tuple): (height, width) of the input images.
-    - channels (int): Number of image channels (default: 3 for RGB).
-    - dtype (torch dtype): Data type (default: float32).
-    - gpu_memory_gb (int): Available GPU memory in GB (default: 12 GB).
-    - model_parameters (int): Number of trainable model parameters (default: 10 million).
-    - safety_factor (float): Factor to reduce the max batch size by (default: 0.8).
-    
-    Returns:
-    - max_batch_size (int): Estimated maximum batch size that fits into GPU memory.
-    """
-    
-    # Convert GPU memory from GB to bytes
-    available_memory_bytes = gpu_memory_gb * 1024**3
-    
-    # Size of a single image in bytes (height * width * channels * bytes_per_pixel)
-    bytes_per_pixel = torch.tensor([], dtype=dtype).element_size()
-    image_memory_bytes = image_size[0] * image_size[1] * channels * bytes_per_pixel
-    
-    # Total memory required for a single image plus model parameters
-    total_per_image_bytes = image_memory_bytes + model_parameters * 4  # 4 bytes for float32 trainable parameters
-    
-    # Calculate max batch size using the formula
-    max_batch_size = available_memory_bytes // (4 * total_per_image_bytes)
-    
-    # Apply safety factor to make the result more conservative
-    max_batch_size = int(max_batch_size * safety_factor)
-
-    return max_batch_size
-
-# dict with number of params per architecture
-model_num_params = {
-    "efficientnet_v2_m": 54139356,
-    "efficientnet_v2_s": 21458488,
-    "convnext_base": 88591464
-}
-
 def main():
     '''
     Command line function
@@ -340,14 +297,8 @@ def main():
     train_dataset = pd.read_csv(cfg['training_set']).reset_index(drop=True)
     validate_dataset = pd.read_csv(cfg['validate_set']).reset_index(drop=True)
     
-    # compute optimal batch size
-    if 'batch_size' in cfg:
-        batch_size = cfg['batch_size']
-    else:
-        print(f"Batch size not specified in config file. Estimating max batch size based on image size {cfg['image_size']}...")
-        batch_size = estimate_max_batch_size(cfg['image_size'], model_parameters = model_num_params[cfg['architecture']]) # estimate
-        cfg['batch_size'] = batch_size # update config
-        print(f"Max batch size estimated to be {batch_size}")
+    # batch size
+    batch_size = cfg['batch_size']
 
     # save config to store for later use
     used_config_fpath = os.path.join(run_dir, 'used-config.yml')
