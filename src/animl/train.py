@@ -166,8 +166,8 @@ def validate(data_loader, model, device="cpu"):
     oa_total /= len(data_loader)
 
     # calculate precision and recall
-    precision = precision_score(true_labels, pred_labels, average="weighted")
-    recall = recall_score(true_labels, pred_labels, average="weighted")
+    precision = precision_score(true_labels, pred_labels, average="weighted", zero_division=0)
+    recall = recall_score(true_labels, pred_labels, average="weighted", zero_division=0)
 
     return loss_total, oa_total, precision, recall
 
@@ -328,32 +328,6 @@ def main():
                               resize_width=cfg['image_size'][1],
                               augment=False)
 
-    # # check class presence in val and train
-    # train_classes = set(os.listdir(os.path.join(os.path.dirname(cfg['training_set']), "train")))
-    # val_classes = set(os.listdir(os.path.join(os.path.dirname(cfg['validate_set']), "val")))
-    # class_presence_rows = []
-    # for elem in train_classes - val_classes:
-    #     class_presence_rows.append({'class_name': elem, 'in_train': True, 'in_val': False})
-    # for elem in val_classes - train_classes:
-    #     class_presence_rows.append({'class_name': elem, 'in_train': False, 'in_val': True})
-
-    #  # check class presence in neihter split
-    # all_classes = list(dl_train.dataset.categories.values())
-    # y_train = train_dataset['species'].map(dl_train.dataset.categories).values
-    # classes_in_y = np.unique(y_train)
-    # missing_classes = np.setdiff1d(all_classes, classes_in_y)
-    # id_to_name_mapping = {v: k for k, v in dl_train.dataset.categories.items()}
-    # missing_class_names = [id_to_name_mapping[idx] for idx in missing_classes]
-    # for elem in missing_class_names:
-    #     class_presence_rows.append({'class_name': elem, 'in_train': False, 'in_val': False})
-    
-    # # print findings
-    # if len(class_presence_rows) > 0:
-    #     print("\nThere are classes that occur only in train, only in val, or in neither split")
-    #     class_presence_df = pd.DataFrame(class_presence_rows).set_index('class_name')
-    #     print(class_presence_df)
-    #     print("\n")
-
     # calculate class weights
     use_class_weights = cfg.get('use_class_weights', False)
     if use_class_weights:
@@ -361,14 +335,14 @@ def main():
         all_classes = list(dl_train.dataset.categories.values())
         y_train = train_dataset['species'].map(dl_train.dataset.categories).values
         classes_in_y = np.unique(y_train)
-        weights_present = compute_class_weight(class_weight='balanced', classes=classes_in_y, y=y_train)
+        weights_present = compute_class_weight(class_weight='balanced', classes=classes_in_y, y=y_train) # compute
         class_weights = np.zeros(len(all_classes), dtype=np.float32)
-        for cls, weight in zip(classes_in_y, weights_present):
+        for cls, weight in zip(classes_in_y, weights_present): # only those present in train
             class_weights[cls] = weight
         scaling_factor = len(y_train) / sum(weights_present)
-        class_weights *= scaling_factor
+        class_weights *= scaling_factor # scale
         class_weights_tensor = torch.tensor(class_weights, dtype=torch.float32).to(device)
-        class_weights_tensor = torch.log1p(class_weights_tensor)
+        class_weights_tensor = torch.log1p(class_weights_tensor) # flatten
     else:
         class_weights_tensor = None
 
