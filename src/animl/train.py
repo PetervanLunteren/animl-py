@@ -22,6 +22,7 @@ import subprocess
 from torch.backends import cudnn
 from torch.optim import SGD
 import matplotlib.pyplot as plt
+from torch_lr_finder import LRFinder # pip install torch-lr-finder
 from sklearn.metrics import precision_score, recall_score
 from torch.optim.lr_scheduler import ReduceLROnPlateau, ExponentialLR
 from sklearn.utils.class_weight import compute_class_weight
@@ -303,7 +304,6 @@ def main():
     print(f"Using image size {cfg['image_size']}")
     print(f"Using architecture {cfg['architecture']}")
     print(f"Using dataset '{os.path.dirname(cfg['training_set'])}'")
-    print(f"Using learning rate {cfg['learning_rate']}")
 
     # save config to store for later use
     used_config_fpath = os.path.join(run_dir, 'used-config.yml')
@@ -373,7 +373,11 @@ def main():
         class_weights_tensor = None
 
     # set up model optimizer
-    optim = SGD(model.parameters(), lr=cfg['learning_rate'], weight_decay=cfg['weight_decay'])
+    # if the learning rate is not specified in cfg, just use a standard initial learning rate for the optimizer
+    # the optimal learning rate will be calculated later on. This is just a starting point.
+    optim = SGD(model.parameters(),
+                lr=cfg.get('learning_rate') if cfg.get('learning_rate') is not None else 1e-4, 
+                weight_decay=cfg['weight_decay'])
     
     # initialize scheduler
     use_scheduler = cfg.get('use_scheduler', False)
@@ -396,6 +400,25 @@ def main():
         print(f"Early stopping enabled with a patience of {patience} epochs")
     else:
         early_stopping = False
+
+    # run a learning rate finder
+    if cfg.get('learning_rate') is None:
+    
+        # set loss function based on the class weights 
+        if class_weights_tensor is not None and class_weights_tensor.numel() > 0:
+            criterion = nn.CrossEntropyLoss(weight = class_weights_tensor)
+        else:
+            criterion = nn.CrossEntropyLoss()
+
+        # learning rate finder
+        lr_finder = LRFinder(model, optim, criterion, device=device)
+        lr_finder.range_test(dl_train, val_loader=dl_val, start_lr=1e-7, end_lr=1, num_iter=200)
+        ax, suggested_lr = lr_finder.plot(suggest_lr = True) # to inspect the loss-learning rate graph
+        print(f"suggested_lr : {suggested_lr}")
+        lr_finder.reset() # to reset the model and optimizer to their initial state
+
+        # do not run the training, let user interpret the plot and manually adjust lr
+        exit()
 
     # training loop
     while current_epoch < numEpochs:
