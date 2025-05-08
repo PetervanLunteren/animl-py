@@ -403,7 +403,7 @@ def main():
 
     # run a learning rate finder
     if cfg.get('learning_rate') is None:
-        print("\nlearning_rate not set in config file. Finding optimal learning rate with LRFinder()...")
+        print("\nlearning_rate is not set in config file. Finding optimal learning rate with LRFinder()...")
 
         # set loss function based on the class weights 
         if class_weights_tensor is not None and class_weights_tensor.numel() > 0:
@@ -424,6 +424,7 @@ def main():
 
         # do not run the training, let user interpret the plot and manually adjust lr
         exit()
+    print(f"Using initial learning rate {cfg.get('learning_rate')}")
 
     # training loop
     while current_epoch < numEpochs:
