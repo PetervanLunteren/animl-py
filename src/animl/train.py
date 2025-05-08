@@ -403,7 +403,8 @@ def main():
 
     # run a learning rate finder
     if cfg.get('learning_rate') is None:
-    
+        print("\nlearning_rate not set in config file. Finding optimal learning rate with LRFinder()...")
+
         # set loss function based on the class weights 
         if class_weights_tensor is not None and class_weights_tensor.numel() > 0:
             criterion = nn.CrossEntropyLoss(weight = class_weights_tensor)
@@ -412,7 +413,11 @@ def main():
 
         # learning rate finder
         lr_finder = LRFinder(model, optim, criterion, device=device)
-        lr_finder.range_test(dl_train, val_loader=dl_val, start_lr=1e-7, end_lr=1, num_iter=200)
+        lr_finder.range_test(dl_train,
+                            #  val_loader=dl_val, # this tests it on the val loss - but takes very long
+                             start_lr=1e-7,
+                             end_lr=1,
+                             num_iter=200)
         ax, suggested_lr = lr_finder.plot(suggest_lr = True) # to inspect the loss-learning rate graph
         print(f"suggested_lr : {suggested_lr}")
         lr_finder.reset() # to reset the model and optimizer to their initial state
