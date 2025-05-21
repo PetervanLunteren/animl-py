@@ -131,36 +131,43 @@ def main():
 
     # initialize data loaders for test set 
     if 'test_set' in cfg:
+        print('\nTest set specified in config file. Checking if file exists...')
         test_set = cfg['test_set']
 
         # sometimes the test CSV is defined but non existent
         if os.path.exists(test_set):
-            print('\nTest set specified in config file. Testing on test set...\n')
+            print('Test set CSV exists. Checking if rows are present...')
             test_dataset = pd.read_csv(test_set).reset_index(drop=True)
-            dl_test = train_dataloader(test_dataset, categories, batch_size=cfg['batch_size'], workers=cfg['num_workers'], crop=crop)
 
-            # get predictions
-            pred, true, conf, paths = test(dl_test, model, device)
-            pred = np.asarray(pred)
-            true = np.asarray(true)
-            conf = np.asarray(conf)
-            corr = (pred == true).tolist()
+            # sometimes the test CSV exists but only has headers and no rows 
+            if not test_dataset.empty:
+                print('Test set available. Testing on test set...\n')
+                dl_test = train_dataloader(test_dataset, categories, batch_size=cfg['batch_size'], workers=cfg['num_workers'], crop=crop)
 
-            # print accuracy
-            oa = np.mean((pred == true))
-            print(f"Test accuracy: {oa}")
+                # get predictions
+                pred, true, conf, paths = test(dl_test, model, device)
+                pred = np.asarray(pred)
+                true = np.asarray(true)
+                conf = np.asarray(conf)
+                corr = (pred == true).tolist()
 
-            # save test results
-            results = pd.DataFrame({'FilePath': paths,
-                                    'Ground Truth': true,
-                                    'Predicted': pred,
-                                    'Confidence': conf,
-                                    'Correct': corr})
-            results.to_csv(run_dir + "/test_results.csv")
-            print(f"Creating: .\\test_results.csv")
-        
+                # print accuracy
+                oa = np.mean((pred == true))
+                print(f"Test accuracy: {oa}")
+
+                # save test results
+                results = pd.DataFrame({'FilePath': paths,
+                                        'Ground Truth': true,
+                                        'Predicted': pred,
+                                        'Confidence': conf,
+                                        'Correct': corr})
+                results.to_csv(run_dir + "/test_results.csv")
+                print(f"Creating: .\\test_results.csv")
+            
+            else:
+                print('Test set CSV exists, but no rows are present. Checking on val...\n')
         else:
-            print('\nTest set not specified in config file. Checking val...\n')
+            print('Test set specified in config file, but file does not exist. Checking on val...\n')
 
     # initialize data loaders for validation set 
     if 'validate_set' in cfg:
