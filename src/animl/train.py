@@ -398,6 +398,8 @@ def main():
 
         # do not run the training, let user interpret the plot and manually adjust lr
         exit()
+    
+    # log
     print(f"Using initial learning rate {cfg.get('learning_rate')}")
 
     # training loop
