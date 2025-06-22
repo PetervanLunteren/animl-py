@@ -16,6 +16,7 @@ import random
 import torch.nn as nn
 import os
 import csv
+import re
 import numpy as np
 import torch
 import subprocess
@@ -26,7 +27,7 @@ from torch_lr_finder import LRFinder # pip install torch-lr-finder
 from sklearn.metrics import precision_score, recall_score
 from torch.optim.lr_scheduler import ReduceLROnPlateau, ExponentialLR
 from sklearn.utils.class_weight import compute_class_weight
-
+import wandb # pip install wandb
 
 from .generator import train_dataloader
 from .classifiers import save_model, load_model
@@ -193,6 +194,14 @@ def append_to_history_csv(history_csv, epoch, train_loss, train_acc, val_loss, v
             'learning_rate': learning_rate
         })
 
+# get project name
+def extract_project_name(lst):
+    pattern = r'^202\d-\d{2}-[A-Z]{3}$'  # regex for 202X-YY-ZZZ
+    for element in lst:
+        if re.match(pattern, element):
+            return element
+    return None
+
 # plot training metrics
 def plot_training_metrics(csv_file, session_dir):
     # Load the CSV file into a pandas DataFrame
@@ -251,8 +260,14 @@ def main():
     Example usage :
     > python train.py --config configs/exp_resnet18.yaml
     '''
+
+    # original CLI argument
     parser = argparse.ArgumentParser(description='Train deep learning model.')
     parser.add_argument('--config', help='Path to config file', default='exp_resnet18.yaml')
+    
+    # add sweep CLI arguments
+    parser.add_argument('--learning_rate', type=float, default=None)
+    parser.add_argument('--weight_decay', type=float, default=None)
     args = parser.parse_args()
 
     # load config
@@ -267,6 +282,31 @@ def main():
     # create next run dir
     run_dir = create_next_run_dir(cfg['experiment_folder'])
     print(f'Created dir "{run_dir}" to store files for this run')
+
+    # initialize wandb
+    wandb.init(
+        project=extract_project_name(cfg['experiment_folder'].split(os.sep)),
+        config=cfg,
+        dir=cfg['experiment_folder'],
+        group=cfg.get("sweep_group", "resnet18_sweep"),
+        tags=["sweep", "gridsearch"]
+    )
+    config = wandb.config
+    wandb.run.name = os.path.dirname(run_dir)
+    wandb.run.summary["best_val_loss"] = float('inf')
+
+    # override config params from CLI or sweep config
+    # learning_rate
+    if args.learning_rate is not None:
+        cfg['learning_rate'] = args.learning_rate
+    elif hasattr(config, 'learning_rate') and config.learning_rate is not None:
+        cfg['learning_rate'] = config.learning_rate
+
+    # weight_decay
+    if args.weight_decay is not None:
+        cfg['weight_decay'] = args.weight_decay
+    elif hasattr(config, 'weight_decay') and config.weight_decay is not None:
+        cfg['weight_decay'] = config.weight_decay
 
     # init random number generator seed (set at the start)
     init_seed(cfg.get('seed', None))
@@ -359,10 +399,11 @@ def main():
         scheduler_patience = int(cfg.get('patience', 20) / 2) - 1 # give the scheduler the chance to lower the learning rate twice before early stopping
         print(f"Using learning rate scheduler ReduceLROnPlateau (factor=0.5, patience={scheduler_patience})")
         scheduler = ReduceLROnPlateau(optim, mode='min', factor=0.5, patience=scheduler_patience)
-        # print(f"Using learning rate scheduler ExponentialLR (gamma=0.5)") # DEBUG
+
+        # or use ExponentialLR()
+        # print(f"Using learning rate scheduler ExponentialLR (gamma=0.5)")
         # gamma = 0.95
         # scheduler = ExponentialLR(optim, gamma=gamma)
-
 
     # initialize training arguments
     numEpochs = cfg['num_epochs']
@@ -433,7 +474,21 @@ def main():
         print(f"           val OA : {oa_val:.5f}")
         print(f"    val precision : {precision:.5f}")
         print(f"       val recall : {recall:.5f}")
-        
+
+        # log to wandb
+        wandb.log({
+            'epoch': current_epoch,
+            'loss_train': loss_train,
+            'loss_val': loss_val,
+            'oa_train': oa_train,
+            'oa_val': oa_val,
+            'precision': precision,
+            'recall': recall,
+            'learning_rate': scheduler.get_last_lr()[0] if use_scheduler else cfg['learning_rate']
+        })
+        if loss_val < best_val_loss:
+            wandb.run.summary["best_val_loss"] = loss_val
+
         # Write history and update plots
         append_to_history_csv(history_csv,
                               current_epoch,
@@ -479,12 +534,11 @@ def main():
         
         # step scheduler
         if use_scheduler:
-            scheduler.step(loss_val) # DEBUG
-            # scheduler.step() # DEBUG
+            scheduler.step(loss_val)
     
-    # after training, directly test and compute metrics on the test set
-    subprocess.run(['python', '-m', 'animl.test', f'--config={used_config_fpath}'], check=True)
-    subprocess.run(['python', 'C:\\Peter\\training-utils\\scripts\\val-test-set.py', 'animl', used_config_fpath], check=True)
+    # # after training, directly test and compute metrics on the test set
+    # subprocess.run(['python', '-m', 'animl.test', f'--config={used_config_fpath}'], check=True)
+    # subprocess.run(['python', 'C:\\Peter\\training-utils\\scripts\\val-test-set.py', 'animl', used_config_fpath], check=True)
 
 if __name__ == '__main__':
     main()
