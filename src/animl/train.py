@@ -292,7 +292,7 @@ def main():
         tags=["sweep", "gridsearch"]
     )
     config = wandb.config
-    wandb.run.name = os.path.dirname(run_dir)
+    wandb.run.name = os.path.basename(run_dir)
     wandb.run.summary["best_val_loss"] = float('inf')
 
     # override config params from CLI or sweep config
