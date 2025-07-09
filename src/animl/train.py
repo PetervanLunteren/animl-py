@@ -442,6 +442,7 @@ def main():
     
     # log
     print(f"Using initial learning rate {cfg.get('learning_rate')}")
+    print(f"Using weight decay {cfg['weight_decay']}")
 
     # training loop
     while current_epoch < numEpochs:
