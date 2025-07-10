@@ -12,4 +12,6 @@ parameters:
     min: 0.000001
     max: 0.01
     distribution: log_uniform_values
+  num_epochs:
+    value: 15  # fix n epochs for sweep runs
 run_cap: 30

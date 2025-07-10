@@ -268,6 +268,7 @@ def main():
     # add sweep CLI arguments
     parser.add_argument('--learning_rate', type=float, default=None)
     parser.add_argument('--weight_decay', type=float, default=None)
+    parser.add_argument('--num_epochs', type=float, default=None)
     args = parser.parse_args()
 
     # load config
@@ -307,6 +308,12 @@ def main():
         cfg['weight_decay'] = args.weight_decay
     elif hasattr(config, 'weight_decay') and config.weight_decay is not None:
         cfg['weight_decay'] = config.weight_decay
+
+    # num_epochs
+    if args.num_epochs is not None:
+        cfg['num_epochs'] = args.num_epochs
+    elif hasattr(config, 'num_epochs') and config.num_epochs is not None:
+        cfg['num_epochs'] = config.num_epochs
 
     # init random number generator seed (set at the start)
     init_seed(cfg.get('seed', None))
@@ -443,6 +450,7 @@ def main():
     # log
     print(f"Using initial learning rate {cfg.get('learning_rate')}")
     print(f"Using weight decay {cfg['weight_decay']}")
+    print(f"Using num epochs {cfg['num_epochs']}")
 
     # training loop
     while current_epoch < numEpochs:
