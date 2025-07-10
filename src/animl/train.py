@@ -311,9 +311,9 @@ def main():
 
     # num_epochs
     if args.num_epochs is not None:
-        cfg['num_epochs'] = args.num_epochs
+        cfg['num_epochs'] = int(args.num_epochs)
     elif hasattr(config, 'num_epochs') and config.num_epochs is not None:
-        cfg['num_epochs'] = config.num_epochs
+        cfg['num_epochs'] = int(config.num_epochs)
 
     # init random number generator seed (set at the start)
     init_seed(cfg.get('seed', None))
