@@ -289,8 +289,7 @@ def main():
         project=extract_project_name(cfg['experiment_folder'].split(os.sep)),
         config=cfg,
         dir=cfg['experiment_folder'],
-        group=cfg.get("sweep_group", "resnet18_sweep"),
-        tags=["sweep", "gridsearch"]
+        group=cfg.get("sweep_group", "resnet18_sweep")
     )
     config = wandb.config
     wandb.run.name = os.path.basename(run_dir)

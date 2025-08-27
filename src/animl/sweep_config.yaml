@@ -1,15 +1,15 @@
 method: bayes
 program: animl/run_train.py
 metric:
-  name: best_val_loss
+  name: loss_val
   goal: minimize
 parameters:
   learning_rate:
-    min: 0.00005
-    max: 0.01
+    min: 0.0001
+    max: 0.002
     distribution: log_uniform_values
   weight_decay:
-    min: 0.000001
+    min: 0.00001
     max: 0.01
     distribution: log_uniform_values
   num_epochs:
