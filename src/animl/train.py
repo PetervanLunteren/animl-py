@@ -460,6 +460,12 @@ def main():
         loss_train, oa_train = train(dl_train, model, optim, device, class_weights_tensor)
         loss_val, oa_val, precision, recall = validate(dl_val, model, device)
 
+        # clear GPU cache
+        if device != 'cpu':
+            print(f"Epoch {current_epoch} - GPU Memory before cache cleanup: {torch.cuda.memory_allocated()/1024**3:.2f} GB")
+            torch.cuda.empty_cache()
+            print(f"Epoch {current_epoch} - GPU Memory after cache cleanup:  {torch.cuda.memory_allocated()/1024**3:.2f} GB")
+
         # combine stats and save
         stats = {
             'num_classes': len(classes),
