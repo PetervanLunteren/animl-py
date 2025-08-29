@@ -462,9 +462,8 @@ def main():
 
         # clear GPU cache
         if device != 'cpu':
-            print(f"Epoch {current_epoch} - GPU Memory before cache cleanup: {torch.cuda.memory_allocated()/1024**3:.2f} GB")
             torch.cuda.empty_cache()
-            print(f"Epoch {current_epoch} - GPU Memory after cache cleanup:  {torch.cuda.memory_allocated()/1024**3:.2f} GB")
+            print(f"GPU Memory: {torch.cuda.memory_allocated()/1024**3:.2f} GB")
 
         # combine stats and save
         stats = {
